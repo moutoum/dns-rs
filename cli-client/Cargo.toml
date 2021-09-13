@@ -1,0 +1,8 @@
+[package]
+name = "cli-client"
+version = "0.1.0"
+authors = ["Maxence Moutoussamy <maxence.moutoussamy@traefik.io>"]
+edition = "2018"
+
+[dependencies]
+dns = { path = "../dns" }
