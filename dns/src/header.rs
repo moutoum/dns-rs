@@ -85,26 +85,26 @@ impl Header {
 
     pub fn from_buffer(buf: &mut BytePacketBuffer) -> Result<Header> {
         let mut header = Header::new();
-        header.id = buf.read_u16()?;
+        header.id = buf.read_u16();
 
-        let byte = buf.read()?;
+        let byte = buf.read_u8();
         header.is_response = byte >> 7 > 0;
         header.opcode = OpCode::from_u8((byte >> 3) & 0x0F);
         header.authoritative_answer = byte & (1 << 2) > 0;
         header.truncated = byte & (1 << 1) > 0;
         header.recursion_desired = byte & 1 > 0;
 
-        let byte = buf.read()?;
+        let byte = buf.read_u8();
         header.recursion_available = byte >> 7 > 0;
         header.z = byte & (1 << 6) > 0;
         header.authenticated_data = byte & (1 << 5) > 0;
         header.checking_disabled = byte & (1 << 4) > 0;
         header.result_code = ResultCode::from_u8(byte & 0x0F);
 
-        header.total_questions = buf.read_u16()?;
-        header.total_answer_records = buf.read_u16()?;
-        header.total_authority_records = buf.read_u16()?;
-        header.total_authority_records = buf.read_u16()?;
+        header.total_questions = buf.read_u16();
+        header.total_answer_records = buf.read_u16();
+        header.total_authority_records = buf.read_u16();
+        header.total_authority_records = buf.read_u16();
 
         Ok(header)
     }

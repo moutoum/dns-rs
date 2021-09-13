@@ -117,9 +117,9 @@ pub struct Question {
 impl Question {
     fn from_buffer(buf: &mut BytePacketBuffer) -> Result<Question> {
         Ok(Question {
-            name: buf.read_qname()?,
-            qtype: QueryType::from_u16(buf.read_u16()?),
-            _class: buf.read_u16()?,
+            name: buf.read_qname(),
+            qtype: QueryType::from_u16(buf.read_u16()),
+            _class: buf.read_u16(),
         })
     }
 }
@@ -149,31 +149,31 @@ pub enum Record {
 
 impl Record {
     fn from_buffer(buf: &mut BytePacketBuffer) -> Result<Record> {
-        let domain = buf.read_qname()?;
-        let qtype = QueryType::from_u16(buf.read_u16()?);
-        let class = buf.read_u16()?;
-        let ttl = Duration::from_secs(buf.read_u32()? as u64);
-        let len = buf.read_u16()?;
+        let domain = buf.read_qname();
+        let qtype = QueryType::from_u16(buf.read_u16());
+        let class = buf.read_u16();
+        let ttl = Duration::from_secs(buf.read_u32() as u64);
+        let len = buf.read_u16();
 
         let record = match qtype {
             QueryType::A => Record::A {
                 domain,
                 _class: class,
                 ttl,
-                ip: Ipv4Addr::from(buf.read_u32()?),
+                ip: Ipv4Addr::from(buf.read_u32()),
             },
             QueryType::CanonicalName => Record::CanonicalName {
                 domain,
                 _class: class,
                 ttl,
-                alias: buf.read_qname()?,
+                alias: buf.read_qname(),
             },
             _ => Record::Unknown {
                 domain,
                 qtype,
                 _class: class,
                 ttl,
-                data: buf.read_n(len as usize)?,
+                data: buf.read_n(len as usize),
             },
         };
 
