@@ -22,11 +22,11 @@ pub struct Header {
     pub total_additional_records: u16,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum OpCode {
-    Query = 0,
-    IQuery = 1,
-    Status = 2,
+    Query,
+    IQuery,
+    Status,
 }
 
 impl OpCode {
@@ -37,16 +37,24 @@ impl OpCode {
             0 | _ => OpCode::Query
         }
     }
+
+    pub fn as_u8(&self) -> u8 {
+        match *self {
+            OpCode::Query => 0,
+            OpCode::IQuery => 1,
+            OpCode::Status => 2,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
 pub enum ResultCode {
-    NoError = 0,
-    FormError = 1,
-    ServerFailure = 2,
-    NXDomain = 3,
-    NotImplemented = 4,
-    Refused = 5,
+    NoError,
+    FormError,
+    ServerFailure,
+    NXDomain,
+    NotImplemented,
+    Refused,
 }
 
 impl ResultCode {
@@ -58,6 +66,17 @@ impl ResultCode {
             4 => ResultCode::NotImplemented,
             5 => ResultCode::Refused,
             0 | _ => ResultCode::NoError,
+        }
+    }
+
+    pub fn as_u8(&self) -> u8 {
+        match *self {
+            ResultCode::NoError => 0,
+            ResultCode::FormError => 1,
+            ResultCode::ServerFailure => 2,
+            ResultCode::NXDomain => 3,
+            ResultCode::NotImplemented => 4,
+            ResultCode::Refused => 5,
         }
     }
 }
@@ -83,7 +102,7 @@ impl Header {
         }
     }
 
-    pub fn from_buffer(buf: &mut BytePacketBuffer) -> Result<Header> {
+    pub fn from_buffer(buf: &mut BytePacketBuffer) -> Header {
         let mut header = Header::new();
         header.id = buf.read_u16();
 
@@ -106,7 +125,31 @@ impl Header {
         header.total_authority_records = buf.read_u16();
         header.total_authority_records = buf.read_u16();
 
-        Ok(header)
+        header
+    }
+
+    pub fn write_to_buffer(&self, buf: &mut BytePacketBuffer) {
+        buf.write_u16(self.id);
+
+        let mut byte = 0;
+        byte |= self.recursion_desired as u8;
+        byte |= (self.truncated as u8) << 1;
+        byte |= (self.authoritative_answer as u8) << 2;
+        byte |= self.opcode.as_u8() << 3;
+        byte |= (self.is_response as u8) << 7;
+        buf.write_u8(byte);
+
+        byte = self.result_code.as_u8();
+        byte |= (self.checking_disabled as u8) << 4;
+        byte |= (self.authenticated_data as u8) << 5;
+        byte |= (self.z as u8) << 6;
+        byte |= (self.recursion_available as u8) << 7;
+        buf.write_u8(byte);
+
+        buf.write_u16(self.total_questions);
+        buf.write_u16(self.total_answer_records);
+        buf.write_u16(self.total_authority_records);
+        buf.write_u16(self.total_additional_records);
     }
 }
 
@@ -125,7 +168,7 @@ mod test {
         ];
 
         let mut buffer = BytePacketBuffer::from_raw_data(packet);
-        let header = Header::from_buffer(&mut buffer).expect("expected a valid header but got an error");
+        let header = Header::from_buffer(&mut buffer);
 
         assert_eq!(Header {
             id: 23099,

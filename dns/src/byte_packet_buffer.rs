@@ -111,6 +111,42 @@ impl BytePacketBuffer {
 
         out
     }
+
+    pub fn write_u8(&mut self, value: u8) {
+        assert!(self.pos + 1 < DEFAULT_BUFFER_SIZE, "pos out of range: {:?} >= {:?}", self.pos, DEFAULT_BUFFER_SIZE);
+        self.buf[self.pos] = value;
+        self.step(1);
+    }
+
+    pub fn write_u16(&mut self, value: u16) {
+        assert!(self.pos + 2 < DEFAULT_BUFFER_SIZE, "pos out of range: {:?} >= {:?}", self.pos, DEFAULT_BUFFER_SIZE);
+        self.buf[self.pos] = (value >> 8) as u8;
+        self.buf[self.pos + 1] = value as u8;
+        self.step(2);
+    }
+
+    pub fn write_u32(&mut self, value: u32) {
+        assert!(self.pos + 4 < DEFAULT_BUFFER_SIZE, "pos out of range: {:?} >= {:?}", self.pos, DEFAULT_BUFFER_SIZE);
+        self.buf[self.pos] = (value >> 24) as u8;
+        self.buf[self.pos + 1] = (value >> 16) as u8;
+        self.buf[self.pos + 2] = (value >> 8) as u8;
+        self.buf[self.pos + 3] = value as u8;
+        self.step(4);
+    }
+
+    pub fn write_qname(&mut self, domain: &str) {
+        domain.split(".").for_each(|label| {
+            self.write_u8(label.len() as u8);
+            self.buf[self.pos..self.pos + label.len()].copy_from_slice(label.as_bytes());
+            self.step(label.len());
+        });
+
+        self.write_u8(0);
+    }
+
+    pub fn bytes(self) -> Vec<u8> {
+        (self.buf[..self.pos]).to_vec()
+    }
 }
 
 mod test {
@@ -217,5 +253,45 @@ mod test {
         assert_eq!("www.yahoo.com", buf.read_qname());
         assert_eq!("www.yahoo.com", buf.read_qname());
         assert_eq!("www.yahoo.com", buf.read_qname());
+    }
+
+    #[test]
+    fn write_u8() {
+        let mut buf = BytePacketBuffer::new();
+        buf.write_u8(0xDE);
+        buf.write_u8(0xAD);
+        assert_eq!(&[0xDE, 0xAD, 0x00], &buf.buf[..3]);
+    }
+
+    #[test]
+    fn write_u16() {
+        let mut buf = BytePacketBuffer::new();
+        buf.write_u16(0xDEAD);
+        buf.write_u16(0xBEEF);
+        assert_eq!(&[0xDE, 0xAD, 0xBE, 0xEF, 0x00], &buf.buf[..5]);
+    }
+
+    #[test]
+    fn write_u32() {
+        let mut buf = BytePacketBuffer::new();
+        buf.write_u32(0xDEAD_BEEF);
+        assert_eq!(&[0xDE, 0xAD, 0xBE, 0xEF, 0x00], &buf.buf[..5]);
+    }
+
+    #[test]
+    fn write_qname() {
+        let mut buf = BytePacketBuffer::new();
+        buf.write_qname("www.google.com");
+        buf.write_qname("www.yahoo.com");
+        assert_eq!(&[
+            0x03, 0x77, 0x77, 0x77,
+            0x06, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
+            0x03, 0x63, 0x6f, 0x6d,
+            0x00,
+            0x03, 0x77, 0x77, 0x77,
+            0x05, 0x79, 0x61, 0x68, 0x6f, 0x6f,
+            0x03, 0x63, 0x6f, 0x6d,
+            0x00,
+        ], &buf.buf[..31]);
     }
 }

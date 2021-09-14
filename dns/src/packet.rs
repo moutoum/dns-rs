@@ -10,11 +10,11 @@ type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub struct Packet {
-    header: Header,
-    questions: Vec<Question>,
-    answers: Vec<Record>,
-    authorities: Vec<Record>,
-    resources: Vec<Record>,
+    pub header: Header,
+    pub questions: Vec<Question>,
+    pub answers: Vec<Record>,
+    pub authorities: Vec<Record>,
+    pub additionals: Vec<Record>,
 }
 
 impl Packet {
@@ -24,13 +24,13 @@ impl Packet {
             questions: vec![],
             answers: vec![],
             authorities: vec![],
-            resources: vec![],
+            additionals: vec![],
         }
     }
 
     pub fn from_buffer(buf: &mut BytePacketBuffer) -> Result<Packet> {
         let mut packet = Packet::new();
-        packet.header = Header::from_buffer(buf)?;
+        packet.header = Header::from_buffer(buf);
 
         packet.questions = Vec::with_capacity(packet.header.total_questions as usize);
         for _ in 0..packet.header.total_questions {
@@ -43,6 +43,15 @@ impl Packet {
         }
 
         Ok(packet)
+    }
+
+    pub fn write_to_buffer(&self, buf: &mut BytePacketBuffer) {
+        self.header.write_to_buffer(buf);
+
+        self.questions.iter().for_each(|question| question.write_to_buffer(buf));
+        self.answers.iter().for_each(|answer| answer.write_to_buffer(buf));
+        self.authorities.iter().for_each(|answer| answer.write_to_buffer(buf));
+        self.additionals.iter().for_each(|answer| answer.write_to_buffer(buf));
     }
 }
 
@@ -105,13 +114,35 @@ impl QueryType {
             _ => QueryType::Unknown(num),
         }
     }
+
+    pub fn as_u16(&self) -> u16 {
+        match *self {
+            QueryType::A => 1,
+            QueryType::AuthoritativeNameServer => 2,
+            QueryType::MailDestination => 3,
+            QueryType::MailForwarder => 4,
+            QueryType::CanonicalName => 5,
+            QueryType::StartOfAuthority => 6,
+            QueryType::Mailbox => 7,
+            QueryType::MailGroup => 8,
+            QueryType::MailRename => 9,
+            QueryType::Null => 10,
+            QueryType::WellKnownService => 11,
+            QueryType::DomainPointer => 12,
+            QueryType::HostInformation => 13,
+            QueryType::MailInformation => 14,
+            QueryType::MailExchange => 15,
+            QueryType::Text => 16,
+            QueryType::Unknown(num) => num,
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct Question {
-    name: String,
-    qtype: QueryType,
-    _class: u16,
+    pub name: String,
+    pub qtype: QueryType,
+    pub _class: u16,
 }
 
 impl Question {
@@ -121,6 +152,12 @@ impl Question {
             qtype: QueryType::from_u16(buf.read_u16()),
             _class: buf.read_u16(),
         })
+    }
+
+    fn write_to_buffer(&self, buf: &mut BytePacketBuffer) {
+        buf.write_qname(&self.name);
+        buf.write_u16(self.qtype.as_u16());
+        buf.write_u16(1);
     }
 }
 
@@ -144,7 +181,7 @@ pub enum Record {
         _class: u16,
         ttl: Duration,
         alias: String,
-    }
+    },
 }
 
 impl Record {
@@ -178,5 +215,24 @@ impl Record {
         };
 
         Ok(record)
+    }
+
+    fn write_to_buffer(&self, buf: &mut BytePacketBuffer) {
+        match self {
+            Record::A { domain, ttl, ip, .. } => {
+                buf.write_qname(&domain);
+                buf.write_u16(QueryType::A.as_u16());
+                buf.write_u16(1);
+                buf.write_u32(ttl.as_secs() as u32);
+                buf.write_u16(4);
+
+                let bytes = ip.octets();
+                buf.write_u8(bytes[0]);
+                buf.write_u8(bytes[1]);
+                buf.write_u8(bytes[2]);
+                buf.write_u8(bytes[3]);
+            },
+            _ => {},
+        };
     }
 }
