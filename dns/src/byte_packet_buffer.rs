@@ -20,7 +20,7 @@ impl BytePacketBuffer {
         buf
     }
 
-    fn pos(&self) -> usize {
+    pub fn pos(&self) -> usize {
         self.pos
     }
 
@@ -142,6 +142,22 @@ impl BytePacketBuffer {
         });
 
         self.write_u8(0);
+    }
+
+    pub fn set_u8(&mut self, pos: usize, value: u8) {
+        self.buf[pos] = value;
+    }
+
+    pub fn set_u16(&mut self, pos: usize, value: u16) {
+        self.buf[pos] = (value >> 8) as u8;
+        self.buf[pos + 1] = value as u8;
+    }
+
+    pub fn set_u32(&mut self, pos: usize, value: u32) {
+        self.buf[pos] = (value >> 24) as u8;
+        self.buf[pos + 1] = (value >> 16) as u8;
+        self.buf[pos + 2] = (value >> 8) as u8;
+        self.buf[pos + 3] = value as u8;
     }
 
     pub fn bytes(self) -> Vec<u8> {

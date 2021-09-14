@@ -176,11 +176,24 @@ pub enum Record {
         ttl: Duration,
         ip: Ipv4Addr,
     },
+    AuthoritativeNameServer {
+        domain: String,
+        _class: u16,
+        ttl: Duration,
+        ns_name: String,
+    },
     CanonicalName {
         domain: String,
         _class: u16,
         ttl: Duration,
         alias: String,
+    },
+    MailExchange {
+        domain: String,
+        _class: u16,
+        ttl: Duration,
+        preference: u16,
+        exchange: String,
     },
 }
 
@@ -199,11 +212,24 @@ impl Record {
                 ttl,
                 ip: Ipv4Addr::from(buf.read_u32()),
             },
+            QueryType::AuthoritativeNameServer => Record::AuthoritativeNameServer {
+                domain,
+                _class: class,
+                ttl,
+                ns_name: buf.read_qname(),
+            },
             QueryType::CanonicalName => Record::CanonicalName {
                 domain,
                 _class: class,
                 ttl,
                 alias: buf.read_qname(),
+            },
+            QueryType::MailExchange => Record::MailExchange {
+                domain,
+                _class: class,
+                ttl,
+                preference: buf.read_u16(),
+                exchange: buf.read_qname(),
             },
             _ => Record::Unknown {
                 domain,
@@ -225,13 +251,46 @@ impl Record {
                 buf.write_u16(1);
                 buf.write_u32(ttl.as_secs() as u32);
                 buf.write_u16(4);
-
                 let bytes = ip.octets();
                 buf.write_u8(bytes[0]);
                 buf.write_u8(bytes[1]);
                 buf.write_u8(bytes[2]);
                 buf.write_u8(bytes[3]);
             },
+            Record::AuthoritativeNameServer { domain, _class, ttl, ns_name } => {
+                buf.write_qname(&domain);
+                buf.write_u16(QueryType::AuthoritativeNameServer.as_u16());
+                buf.write_u16(1);
+                buf.write_u32(ttl.as_secs() as u32);
+                let size_pos = buf.pos();
+                buf.write_u16(0);
+                buf.write_qname(ns_name);
+                let payload_size = buf.pos() - size_pos + 2;
+                buf.set_u16(size_pos,  payload_size as u16);
+            },
+            Record::CanonicalName { domain, _class, ttl, alias } => {
+                buf.write_qname(&domain);
+                buf.write_u16(QueryType::AuthoritativeNameServer.as_u16());
+                buf.write_u16(1);
+                buf.write_u32(ttl.as_secs() as u32);
+                let size_pos = buf.pos();
+                buf.write_u16(0);
+                buf.write_qname(alias);
+                let payload_size = buf.pos() - size_pos + 2;
+                buf.set_u16(size_pos,  payload_size as u16);
+            }
+            Record::MailExchange { domain, _class, ttl, preference, exchange } => {
+                buf.write_qname(&domain);
+                buf.write_u16(QueryType::AuthoritativeNameServer.as_u16());
+                buf.write_u16(1);
+                buf.write_u32(ttl.as_secs() as u32);
+                let size_pos = buf.pos();
+                buf.write_u16(0);
+                buf.write_u16(*preference);
+                buf.write_qname(exchange);
+                let payload_size = buf.pos() - size_pos + 2;
+                buf.set_u16(size_pos,  payload_size as u16);
+            }
             _ => {},
         };
     }

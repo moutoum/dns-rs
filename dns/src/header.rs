@@ -188,4 +188,33 @@ mod test {
             total_additional_records: 0,
         }, header);
     }
+
+    #[test]
+    fn write_header() {
+        let header = Header {
+            id: 23099,
+            is_response: false,
+            opcode: OpCode::Query,
+            authoritative_answer: false,
+            truncated: false,
+            recursion_desired: true,
+            recursion_available: false,
+            z: false,
+            authenticated_data: true,
+            checking_disabled: false,
+            result_code: ResultCode::NoError,
+            total_questions: 1,
+            total_answer_records: 0,
+            total_authority_records: 0,
+            total_additional_records: 0,
+        };
+
+        let mut buffer = BytePacketBuffer::new();
+        header.write_to_buffer(&mut buffer);
+
+        assert_eq!(&[
+            0x5a, 0x3b, 0x01, 0x20, 0x00, 0x01, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00
+        ], &buffer.bytes().as_slice());
+    }
 }
