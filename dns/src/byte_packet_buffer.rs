@@ -86,7 +86,10 @@ impl BytePacketBuffer {
 
                 // Pointer to a qname in the packet.
                 _ if len & 0xC0 == 0xC0 => {
-                    self.seek(pos + 1);
+                    if !jumped {
+                        self.seek(pos + 1);
+                    }
+
                     let b1 = len as u16 ^ 0xC0;
                     let b2 = self.get_u8(pos) as u16;
                     let offset = (b1 << 8) | b2;
@@ -165,6 +168,7 @@ impl BytePacketBuffer {
     }
 }
 
+#[cfg(test)]
 mod test {
     use crate::byte_packet_buffer::BytePacketBuffer;
 
@@ -262,13 +266,18 @@ mod test {
             0x03, 0x63, 0x6f, 0x6d, // len=3 label="com"
             0x00,
             0xC0, 0x00, // Pointer to www.yahoo.com
-            0xC0, 0x0F // Pointer to pointer to www.yahoo.com
+            0xC0, 0x0F, // Pointer to pointer to www.yahoo.com
+            0x03, 0x77, 0x77, 0x77,
+            0x06, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
+            0x03, 0x63, 0x6f, 0x6d,
+            0x00,
         ];
 
         let mut buf = BytePacketBuffer::from_raw_data(packet);
         assert_eq!("www.yahoo.com", buf.read_qname());
         assert_eq!("www.yahoo.com", buf.read_qname());
         assert_eq!("www.yahoo.com", buf.read_qname());
+        assert_eq!("www.google.com", buf.read_qname());
     }
 
     #[test]

@@ -1,8 +1,5 @@
 use crate::byte_packet_buffer::BytePacketBuffer;
 
-type Error = Box<dyn std::error::Error>;
-type Result<T> = std::result::Result<T, Error>;
-
 #[derive(Debug, PartialEq)]
 pub struct Header {
     pub id: u16,
@@ -123,7 +120,7 @@ impl Header {
         header.total_questions = buf.read_u16();
         header.total_answer_records = buf.read_u16();
         header.total_authority_records = buf.read_u16();
-        header.total_authority_records = buf.read_u16();
+        header.total_additional_records = buf.read_u16();
 
         header
     }

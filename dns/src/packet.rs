@@ -3,10 +3,6 @@ use std::time::Duration;
 
 use crate::byte_packet_buffer::BytePacketBuffer;
 use crate::header::Header;
-use crate::packet::Record::Unknown;
-
-type Error = Box<dyn std::error::Error>;
-type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub struct Packet {
@@ -28,21 +24,31 @@ impl Packet {
         }
     }
 
-    pub fn from_buffer(buf: &mut BytePacketBuffer) -> Result<Packet> {
+    pub fn from_buffer(buf: &mut BytePacketBuffer) -> Packet {
         let mut packet = Packet::new();
         packet.header = Header::from_buffer(buf);
 
         packet.questions = Vec::with_capacity(packet.header.total_questions as usize);
         for _ in 0..packet.header.total_questions {
-            packet.questions.push(Question::from_buffer(buf)?);
+            packet.questions.push(Question::from_buffer(buf));
         }
 
         packet.answers = Vec::with_capacity(packet.header.total_answer_records as usize);
         for _ in 0..packet.header.total_answer_records {
-            packet.answers.push(Record::from_buffer(buf)?);
+            packet.answers.push(Record::from_buffer(buf));
         }
 
-        Ok(packet)
+        packet.authorities = Vec::with_capacity(packet.header.total_authority_records as usize);
+        for _ in 0..packet.header.total_authority_records {
+            packet.authorities.push(Record::from_buffer(buf));
+        }
+
+        packet.additionals = Vec::with_capacity(packet.header.total_additional_records as usize);
+        for _ in 0..packet.header.total_additional_records {
+            packet.additionals.push(Record::from_buffer(buf));
+        }
+
+        packet
     }
 
     pub fn write_to_buffer(&self, buf: &mut BytePacketBuffer) {
@@ -50,12 +56,12 @@ impl Packet {
 
         self.questions.iter().for_each(|question| question.write_to_buffer(buf));
         self.answers.iter().for_each(|answer| answer.write_to_buffer(buf));
-        self.authorities.iter().for_each(|answer| answer.write_to_buffer(buf));
-        self.additionals.iter().for_each(|answer| answer.write_to_buffer(buf));
+        self.authorities.iter().for_each(|authority| authority.write_to_buffer(buf));
+        self.additionals.iter().for_each(|additional| additional.write_to_buffer(buf));
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum QueryType {
     Unknown(u16),
     // A, IPv4 address.
@@ -146,12 +152,12 @@ pub struct Question {
 }
 
 impl Question {
-    fn from_buffer(buf: &mut BytePacketBuffer) -> Result<Question> {
-        Ok(Question {
+    fn from_buffer(buf: &mut BytePacketBuffer) -> Question {
+        Question {
             name: buf.read_qname(),
             qtype: QueryType::from_u16(buf.read_u16()),
             _class: buf.read_u16(),
-        })
+        }
     }
 
     fn write_to_buffer(&self, buf: &mut BytePacketBuffer) {
@@ -198,14 +204,14 @@ pub enum Record {
 }
 
 impl Record {
-    fn from_buffer(buf: &mut BytePacketBuffer) -> Result<Record> {
+    fn from_buffer(buf: &mut BytePacketBuffer) -> Record {
         let domain = buf.read_qname();
         let qtype = QueryType::from_u16(buf.read_u16());
         let class = buf.read_u16();
         let ttl = Duration::from_secs(buf.read_u32() as u64);
         let len = buf.read_u16();
 
-        let record = match qtype {
+        match qtype {
             QueryType::A => Record::A {
                 domain,
                 _class: class,
@@ -238,9 +244,7 @@ impl Record {
                 ttl,
                 data: buf.read_n(len as usize),
             },
-        };
-
-        Ok(record)
+        }
     }
 
     fn write_to_buffer(&self, buf: &mut BytePacketBuffer) {
@@ -256,7 +260,7 @@ impl Record {
                 buf.write_u8(bytes[1]);
                 buf.write_u8(bytes[2]);
                 buf.write_u8(bytes[3]);
-            },
+            }
             Record::AuthoritativeNameServer { domain, _class, ttl, ns_name } => {
                 buf.write_qname(&domain);
                 buf.write_u16(QueryType::AuthoritativeNameServer.as_u16());
@@ -266,8 +270,8 @@ impl Record {
                 buf.write_u16(0);
                 buf.write_qname(ns_name);
                 let payload_size = buf.pos() - size_pos + 2;
-                buf.set_u16(size_pos,  payload_size as u16);
-            },
+                buf.set_u16(size_pos, payload_size as u16);
+            }
             Record::CanonicalName { domain, _class, ttl, alias } => {
                 buf.write_qname(&domain);
                 buf.write_u16(QueryType::AuthoritativeNameServer.as_u16());
@@ -277,7 +281,7 @@ impl Record {
                 buf.write_u16(0);
                 buf.write_qname(alias);
                 let payload_size = buf.pos() - size_pos + 2;
-                buf.set_u16(size_pos,  payload_size as u16);
+                buf.set_u16(size_pos, payload_size as u16);
             }
             Record::MailExchange { domain, _class, ttl, preference, exchange } => {
                 buf.write_qname(&domain);
@@ -289,9 +293,9 @@ impl Record {
                 buf.write_u16(*preference);
                 buf.write_qname(exchange);
                 let payload_size = buf.pos() - size_pos + 2;
-                buf.set_u16(size_pos,  payload_size as u16);
+                buf.set_u16(size_pos, payload_size as u16);
             }
-            _ => {},
+            _ => {}
         };
     }
 }
