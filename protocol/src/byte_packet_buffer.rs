@@ -122,14 +122,14 @@ impl BytePacketBuffer {
     }
 
     pub fn write_u16(&mut self, value: u16) {
-        assert!(self.pos + 2 < DEFAULT_BUFFER_SIZE, "pos out of range: {:?} >= {:?}", self.pos, DEFAULT_BUFFER_SIZE);
+        assert!(self.pos + 2 < DEFAULT_BUFFER_SIZE, "pos out of range: {:?} + 2 >= {:?}", self.pos, DEFAULT_BUFFER_SIZE);
         self.buf[self.pos] = (value >> 8) as u8;
         self.buf[self.pos + 1] = value as u8;
         self.step(2);
     }
 
     pub fn write_u32(&mut self, value: u32) {
-        assert!(self.pos + 4 < DEFAULT_BUFFER_SIZE, "pos out of range: {:?} >= {:?}", self.pos, DEFAULT_BUFFER_SIZE);
+        assert!(self.pos + 4 < DEFAULT_BUFFER_SIZE, "pos out of range: {:?} + 4 >= {:?}", self.pos, DEFAULT_BUFFER_SIZE);
         self.buf[self.pos] = (value >> 24) as u8;
         self.buf[self.pos + 1] = (value >> 16) as u8;
         self.buf[self.pos + 2] = (value >> 8) as u8;

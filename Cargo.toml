@@ -1,2 +1,2 @@
 [workspace]
-members = ["dns", "cli-client", "server"]
+members = ["protocol", "resolver"]

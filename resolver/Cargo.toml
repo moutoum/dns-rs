@@ -1,8 +1,11 @@
 [package]
-name = "cli-client"
+name = "resolver"
 version = "0.1.0"
 authors = ["Maxence Moutoussamy <maxence.moutoussamy@traefik.io>"]
 edition = "2018"
 
 [dependencies]
-dns = { path = "../dns" }
+structopt = "0.3.23"
+anyhow = "1.0.44"
+rand = "0.8.4"
+protocol = { path = "../protocol" }

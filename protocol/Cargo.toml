@@ -1,10 +1,7 @@
 [package]
-name = "server"
+name = "protocol"
 version = "0.1.0"
 authors = ["Maxence Moutoussamy <maxence.moutoussamy@traefik.io>"]
 edition = "2018"
 
 [dependencies]
-structopt = "0.3.23"
-anyhow = "1.0.44"
-dns = { path = "../dns" }
