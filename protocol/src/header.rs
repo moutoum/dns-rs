@@ -1,4 +1,7 @@
 use crate::byte_packet_buffer::BytePacketBuffer;
+use crate::result::Result;
+use crate::seek::Seek;
+use crate::ser::Serializer;
 
 #[derive(Debug, PartialEq)]
 pub struct Header {
@@ -125,8 +128,11 @@ impl Header {
         header
     }
 
-    pub fn write_to_buffer(&self, buf: &mut BytePacketBuffer) {
-        buf.write_u16(self.id);
+    pub fn serialize<S>(&self, serializer: &mut S) -> Result<()>
+        where
+            S: Serializer + Seek,
+    {
+        serializer.serialize_u16(self.id)?;
 
         let mut byte = 0;
         byte |= self.recursion_desired as u8;
@@ -134,19 +140,19 @@ impl Header {
         byte |= (self.authoritative_answer as u8) << 2;
         byte |= self.opcode.as_u8() << 3;
         byte |= (self.is_response as u8) << 7;
-        buf.write_u8(byte);
+        serializer.serialize_u8(byte)?;
 
         byte = self.result_code.as_u8();
         byte |= (self.checking_disabled as u8) << 4;
         byte |= (self.authenticated_data as u8) << 5;
         byte |= (self.z as u8) << 6;
         byte |= (self.recursion_available as u8) << 7;
-        buf.write_u8(byte);
+        serializer.serialize_u8(byte)?;
 
-        buf.write_u16(self.total_questions);
-        buf.write_u16(self.total_answer_records);
-        buf.write_u16(self.total_authority_records);
-        buf.write_u16(self.total_additional_records);
+        serializer.serialize_u16(self.total_questions)?;
+        serializer.serialize_u16(self.total_answer_records)?;
+        serializer.serialize_u16(self.total_authority_records)?;
+        serializer.serialize_u16(self.total_additional_records)
     }
 }
 
@@ -207,7 +213,9 @@ mod test {
         };
 
         let mut buffer = BytePacketBuffer::new();
-        header.write_to_buffer(&mut buffer);
+
+        let res = header.serialize(&mut buffer);
+        assert!(res.is_ok());
 
         assert_eq!(&[
             0x5a, 0x3b, 0x01, 0x20, 0x00, 0x01, 0x00, 0x00,

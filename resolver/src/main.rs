@@ -5,6 +5,7 @@ use structopt::StructOpt;
 
 use protocol::byte_packet_buffer::BytePacketBuffer;
 use protocol::packet::Packet;
+use protocol::ser::Serialize;
 
 use crate::resolver::Resolver;
 
@@ -58,7 +59,7 @@ fn main() -> Result<()> {
     response.header.is_response = true;
 
     let mut buffer = BytePacketBuffer::new();
-    response.write_to_buffer(&mut buffer);
+    response.serialize(&mut buffer)?;
     socket.send_to(&buffer.bytes(), src)?;
 
     Ok(())
