@@ -77,7 +77,7 @@ impl Resolver {
             // NXDomain means that the authoritative server doesn't know
             // the queried domain. In this case we are just returning an
             // error to the user.
-            if response.header.result_code == ResultCode::NXDomain {
+            if response.header.result_code == ResultCode::NxDomain {
                 return Err(anyhow::anyhow!("The requested domain {} does not exist", qname.as_ref()));
             }
 
