@@ -22,6 +22,12 @@ pub struct Header {
     pub total_additional_records: u16,
 }
 
+impl Default for Header {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum OpCode {
     Query,
@@ -34,7 +40,7 @@ impl OpCode {
         match num {
             1 => OpCode::IQuery,
             2 => OpCode::Status,
-            0 | _ => OpCode::Query
+            _ => OpCode::Query
         }
     }
 
@@ -52,7 +58,7 @@ pub enum ResultCode {
     NoError,
     FormError,
     ServerFailure,
-    NXDomain,
+    NxDomain,
     NotImplemented,
     Refused,
 }
@@ -62,10 +68,10 @@ impl ResultCode {
         match num {
             1 => ResultCode::FormError,
             2 => ResultCode::ServerFailure,
-            3 => ResultCode::NXDomain,
+            3 => ResultCode::NxDomain,
             4 => ResultCode::NotImplemented,
             5 => ResultCode::Refused,
-            0 | _ => ResultCode::NoError,
+            _ => ResultCode::NoError,
         }
     }
 
@@ -74,7 +80,7 @@ impl ResultCode {
             ResultCode::NoError => 0,
             ResultCode::FormError => 1,
             ResultCode::ServerFailure => 2,
-            ResultCode::NXDomain => 3,
+            ResultCode::NxDomain => 3,
             ResultCode::NotImplemented => 4,
             ResultCode::Refused => 5,
         }

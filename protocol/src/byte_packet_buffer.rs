@@ -11,6 +11,12 @@ pub struct BytePacketBuffer {
     pos: usize,
 }
 
+impl Default for BytePacketBuffer {
+    fn default() -> BytePacketBuffer {
+        Self::new()
+    }
+}
+
 impl Serializer for BytePacketBuffer {
     fn serialize_u8(&mut self, value: u8) -> Result<()> {
         if self.pos + 1 > DEFAULT_BUFFER_SIZE {
@@ -56,7 +62,7 @@ impl Serializer for BytePacketBuffer {
     }
 
     fn serialize_qname(&mut self, qname: &str) -> Result<()> {
-        for label in qname.split(".") {
+        for label in qname.split('.') {
             let len = label.len();
             self.serialize_u8(len as u8)?;
 
@@ -418,7 +424,7 @@ mod test {
 
     #[test]
     fn serialize_u8() {
-        let ref mut serializer = BytePacketBuffer::new();
+        let serializer = &mut BytePacketBuffer::new();
 
         let res = serializer.serialize_u8(0xDE);
         assert!(res.is_ok());
@@ -431,7 +437,7 @@ mod test {
 
     #[test]
     fn out_of_range_serialize_u8() {
-        let ref mut serializer = BytePacketBuffer::new();
+        let serializer = &mut BytePacketBuffer::new();
         serializer.pos = 512;
 
         let res = serializer.serialize_u8(0xDE);
@@ -440,7 +446,7 @@ mod test {
 
     #[test]
     fn serialize_u16() {
-        let ref mut serializer = BytePacketBuffer::new();
+        let serializer = &mut BytePacketBuffer::new();
 
         let res = serializer.serialize_u16(0xDEAD);
         assert!(res.is_ok());
@@ -453,7 +459,7 @@ mod test {
 
     #[test]
     fn out_of_range_serialize_u16() {
-        let ref mut serializer = BytePacketBuffer::new();
+        let serializer = &mut BytePacketBuffer::new();
         serializer.pos = 512;
 
         let res = serializer.serialize_u16(0xDEAD);
@@ -462,7 +468,7 @@ mod test {
 
     #[test]
     fn serialize_u32() {
-        let ref mut serializer = BytePacketBuffer::new();
+        let serializer = &mut BytePacketBuffer::new();
 
         let res = serializer.serialize_u32(0xDEAD_BEEF);
         assert!(res.is_ok());
@@ -472,7 +478,7 @@ mod test {
 
     #[test]
     fn out_of_range_serialize_u32() {
-        let ref mut serializer = BytePacketBuffer::new();
+        let serializer = &mut BytePacketBuffer::new();
         serializer.pos = 512;
 
         let res = serializer.serialize_u32(0xDEAD_BEEF);
@@ -481,7 +487,7 @@ mod test {
 
     #[test]
     fn serialize_qname() {
-        let ref mut serializer = BytePacketBuffer::new();
+        let serializer = &mut BytePacketBuffer::new();
 
         let res = serializer.serialize_qname("www.google.com");
         assert!(res.is_ok());

@@ -17,6 +17,12 @@ pub struct Packet {
     pub additionals: Vec<Record>,
 }
 
+impl Default for Packet {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Packet {
     pub fn new() -> Packet {
         Packet {
