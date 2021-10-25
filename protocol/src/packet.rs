@@ -3,6 +3,10 @@ use std::time::Duration;
 
 use crate::byte_packet_buffer::BytePacketBuffer;
 use crate::header::Header;
+use crate::records;
+use crate::result::Result;
+use crate::seek::Seek;
+use crate::ser::{Serialize, Serializer};
 
 #[derive(Debug)]
 pub struct Packet {
@@ -50,14 +54,32 @@ impl Packet {
 
         packet
     }
+}
 
-    pub fn write_to_buffer(&self, buf: &mut BytePacketBuffer) {
-        self.header.write_to_buffer(buf);
+impl Serialize for Packet {
+    fn serialize<S>(&self, serializer: &mut S) -> Result<()>
+        where
+            S: Serializer + Seek,
+    {
+        self.header.serialize(serializer)?;
 
-        self.questions.iter().for_each(|question| question.write_to_buffer(buf));
-        self.answers.iter().for_each(|answer| answer.write_to_buffer(buf));
-        self.authorities.iter().for_each(|authority| authority.write_to_buffer(buf));
-        self.additionals.iter().for_each(|additional| additional.write_to_buffer(buf));
+        for question in self.questions.iter() {
+            question.serialize(serializer)?;
+        }
+
+        for answer in self.answers.iter() {
+            answer.serialize(serializer)?;
+        }
+
+        for authority in self.authorities.iter() {
+            authority.serialize(serializer)?;
+        }
+
+        for additional in self.additionals.iter() {
+            additional.serialize(serializer)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -159,11 +181,16 @@ impl Question {
             _class: buf.read_u16(),
         }
     }
+}
 
-    fn write_to_buffer(&self, buf: &mut BytePacketBuffer) {
-        buf.write_qname(&self.name);
-        buf.write_u16(self.qtype.as_u16());
-        buf.write_u16(1);
+impl Serialize for Question {
+    fn serialize<S>(&self, serializer: &mut S) -> Result<()>
+        where
+            S: Serializer + Seek
+    {
+        serializer.serialize_qname(&self.name)?;
+        serializer.serialize_u16(self.qtype.as_u16())?;
+        serializer.serialize_u16(1)
     }
 }
 
@@ -176,31 +203,10 @@ pub enum Record {
         ttl: Duration,
         data: Vec<u8>,
     },
-    A {
-        domain: String,
-        _class: u16,
-        ttl: Duration,
-        ip: Ipv4Addr,
-    },
-    AuthoritativeNameServer {
-        domain: String,
-        _class: u16,
-        ttl: Duration,
-        ns_name: String,
-    },
-    CanonicalName {
-        domain: String,
-        _class: u16,
-        ttl: Duration,
-        alias: String,
-    },
-    MailExchange {
-        domain: String,
-        _class: u16,
-        ttl: Duration,
-        preference: u16,
-        exchange: String,
-    },
+    A(records::A),
+    AuthoritativeNameServer(records::AuthoritativeNameServer),
+    CanonicalName(records::CName),
+    MailExchange(records::MailExchange),
 }
 
 impl Record {
@@ -212,31 +218,31 @@ impl Record {
         let len = buf.read_u16();
 
         match qtype {
-            QueryType::A => Record::A {
+            QueryType::A => Record::A(records::A {
                 domain,
                 _class: class,
                 ttl,
                 ip: Ipv4Addr::from(buf.read_u32()),
-            },
-            QueryType::AuthoritativeNameServer => Record::AuthoritativeNameServer {
+            }),
+            QueryType::AuthoritativeNameServer => Record::AuthoritativeNameServer(records::AuthoritativeNameServer {
                 domain,
                 _class: class,
                 ttl,
                 ns_name: buf.read_qname(),
-            },
-            QueryType::CanonicalName => Record::CanonicalName {
+            }),
+            QueryType::CanonicalName => Record::CanonicalName(records::CName {
                 domain,
                 _class: class,
                 ttl,
                 alias: buf.read_qname(),
-            },
-            QueryType::MailExchange => Record::MailExchange {
+            }),
+            QueryType::MailExchange => Record::MailExchange(records::MailExchange {
                 domain,
                 _class: class,
                 ttl,
                 preference: buf.read_u16(),
                 exchange: buf.read_qname(),
-            },
+            }),
             _ => Record::Unknown {
                 domain,
                 qtype,
@@ -246,56 +252,21 @@ impl Record {
             },
         }
     }
+}
 
-    fn write_to_buffer(&self, buf: &mut BytePacketBuffer) {
+impl Serialize for Record {
+    fn serialize<S>(&self, serializer: &mut S) -> Result<()>
+        where
+            S: Serializer + Seek,
+    {
         match self {
-            Record::A { domain, ttl, ip, .. } => {
-                buf.write_qname(&domain);
-                buf.write_u16(QueryType::A.as_u16());
-                buf.write_u16(1);
-                buf.write_u32(ttl.as_secs() as u32);
-                buf.write_u16(4);
-                let bytes = ip.octets();
-                buf.write_u8(bytes[0]);
-                buf.write_u8(bytes[1]);
-                buf.write_u8(bytes[2]);
-                buf.write_u8(bytes[3]);
-            }
-            Record::AuthoritativeNameServer { domain, _class, ttl, ns_name } => {
-                buf.write_qname(&domain);
-                buf.write_u16(QueryType::AuthoritativeNameServer.as_u16());
-                buf.write_u16(1);
-                buf.write_u32(ttl.as_secs() as u32);
-                let size_pos = buf.pos();
-                buf.write_u16(0);
-                buf.write_qname(ns_name);
-                let payload_size = buf.pos() - size_pos + 2;
-                buf.set_u16(size_pos, payload_size as u16);
-            }
-            Record::CanonicalName { domain, _class, ttl, alias } => {
-                buf.write_qname(&domain);
-                buf.write_u16(QueryType::AuthoritativeNameServer.as_u16());
-                buf.write_u16(1);
-                buf.write_u32(ttl.as_secs() as u32);
-                let size_pos = buf.pos();
-                buf.write_u16(0);
-                buf.write_qname(alias);
-                let payload_size = buf.pos() - size_pos + 2;
-                buf.set_u16(size_pos, payload_size as u16);
-            }
-            Record::MailExchange { domain, _class, ttl, preference, exchange } => {
-                buf.write_qname(&domain);
-                buf.write_u16(QueryType::AuthoritativeNameServer.as_u16());
-                buf.write_u16(1);
-                buf.write_u32(ttl.as_secs() as u32);
-                let size_pos = buf.pos();
-                buf.write_u16(0);
-                buf.write_u16(*preference);
-                buf.write_qname(exchange);
-                let payload_size = buf.pos() - size_pos + 2;
-                buf.set_u16(size_pos, payload_size as u16);
-            }
+            Record::A(record) => { record.serialize(serializer)?; }
+            Record::AuthoritativeNameServer(record) => { record.serialize(serializer)?; }
+            Record::CanonicalName(record) => { record.serialize(serializer)?; }
+            Record::MailExchange(record) => { record.serialize(serializer)?; }
             _ => {}
         };
+
+        Ok(())
     }
 }

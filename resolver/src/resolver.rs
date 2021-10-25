@@ -8,6 +8,8 @@ use rand::Rng;
 use protocol::byte_packet_buffer::BytePacketBuffer;
 use protocol::header::{Header, OpCode, ResultCode};
 use protocol::packet::{Packet, QueryType, Question, Record};
+use protocol::records;
+use protocol::ser::Serialize;
 
 // https://www.internic.net/domain/named.root
 const ROOT_SERVERS: &[(&str, [u8; 4])] = &[
@@ -108,7 +110,7 @@ impl Resolver {
             let fist_answer = ns_response.answers
                 .iter()
                 .filter_map(|record| match record {
-                    Record::A { ip, .. } => Some(IpAddr::V4(*ip)),
+                    Record::A(records::A { ip, .. }) => Some(IpAddr::V4(*ip)),
                     _ => None
                 })
                 .next();
@@ -126,7 +128,7 @@ impl Resolver {
         packet.authorities
             .iter()
             .filter_map(|record| match record {
-                Record::AuthoritativeNameServer { domain, ns_name, .. } => Some((domain.as_str(), ns_name.as_str())),
+                Record::AuthoritativeNameServer(records::AuthoritativeNameServer { domain, ns_name, .. }) => Some((domain.as_str(), ns_name.as_str())),
                 _ => None
             })
             .find(|(domain, _)| qname.as_ref().ends_with(domain))
@@ -138,7 +140,7 @@ impl Resolver {
         packet.authorities
             .iter()
             .filter_map(|record| match record {
-                Record::AuthoritativeNameServer { domain, ns_name, .. } => Some((domain.as_str(), ns_name.as_str())),
+                Record::AuthoritativeNameServer(records::AuthoritativeNameServer { domain, ns_name, .. }) => Some((domain.as_str(), ns_name.as_str())),
                 _ => None,
             })
             .filter(move |(domain, _)| qname.as_ref().ends_with(domain))
@@ -146,7 +148,7 @@ impl Resolver {
                 packet.additionals
                     .iter()
                     .filter_map(move |record| match record {
-                        Record::A { ip, domain, .. } if domain == host => Some(ip),
+                        Record::A(records::A { ip, domain, .. }) if domain == host => Some(ip),
                         _ => None,
                     })
             )
@@ -248,6 +250,6 @@ impl Query {
     }
 
     fn write_to_buffer(self, buf: &mut BytePacketBuffer) {
-        self.packet.write_to_buffer(buf)
+        self.packet.serialize(buf).unwrap();
     }
 }
