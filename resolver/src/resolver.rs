@@ -47,18 +47,18 @@ impl Resolver {
         ResolverBuilder::new()
     }
 
-    pub fn resolve<S>(&self, qname: S, qtype: QueryType) -> Result<Packet>
+    pub fn resolve<S>(&self, qname: S, qtype: QueryType, recursion_desired: bool) -> Result<Packet>
         where S: AsRef<str>
     {
         let (_, addr) = self.get_root_server();
-        self.recursive_lookup(qname, qtype, *addr)
+        self.recursive_lookup(qname, qtype, *addr, recursion_desired)
     }
 
     fn get_root_server(&self) -> &(String, IpAddr) {
         &self.root_servers[0]
     }
 
-    fn recursive_lookup<S>(&self, qname: S, qtype: QueryType, server_ip: IpAddr) -> Result<Packet>
+    fn recursive_lookup<S>(&self, qname: S, qtype: QueryType, server_ip: IpAddr, recursion_desired: bool) -> Result<Packet>
         where S: AsRef<str>
     {
         let mut server_ip = server_ip;
@@ -84,16 +84,18 @@ impl Resolver {
             // When the --no-recursive option is enabled, we are not
             // looping over the authoritative servers to find an answer.
             // Instead, we are just displaying the latest response.
-            if !self.recursive {
+            if !self.recursive || !recursion_desired {
                 return Ok(response);
             }
 
             // + Find NS records corresponding to queried domain.
             let matching_ns = self.find_matching_ns(&qname, &response);
+            println!("-- Matching name server: {:?}", matching_ns);
 
             // + Check if one of the NS record has an additional A record.
             if let Some(ip) = self.find_matching_ns_a(&qname, &response) {
                 server_ip = IpAddr::V4(ip);
+                println!("-- Matching IP: {:?}", ip);
                 continue;
             }
 
@@ -103,11 +105,11 @@ impl Resolver {
                 None => return Ok(response),
             };
 
-            let ns_response = self.recursive_lookup(authoritative_name_server, QueryType::A, server_ip)?;
+            let ns_response = self.recursive_lookup(authoritative_name_server, QueryType::A, server_ip, true)?;
 
             // + Once the authoritative server ip is found, continue the loop
             //   with the new server for the queried domain.
-            let fist_answer = ns_response.answers
+            let first_answer = ns_response.answers
                 .iter()
                 .filter_map(|record| match record {
                     Record::A(records::A { ip, .. }) => Some(IpAddr::V4(*ip)),
@@ -115,7 +117,7 @@ impl Resolver {
                 })
                 .next();
 
-            server_ip = match fist_answer {
+            server_ip = match first_answer {
                 Some(ip) => ip,
                 None => return Ok(response),
             }
