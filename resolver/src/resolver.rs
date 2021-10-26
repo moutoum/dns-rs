@@ -8,7 +8,6 @@ use rand::Rng;
 use protocol::byte_packet_buffer::BytePacketBuffer;
 use protocol::header::{Header, OpCode, ResultCode};
 use protocol::packet::{Packet, QueryType, Question, Record};
-use protocol::records;
 use protocol::ser::Serialize;
 
 // https://www.internic.net/domain/named.root
@@ -50,12 +49,17 @@ impl Resolver {
     pub fn resolve<S>(&self, qname: S, qtype: QueryType, recursion_desired: bool) -> Result<Packet>
         where S: AsRef<str>
     {
-        let (_, addr) = self.get_root_server();
+        let (name, addr) = self.get_root_server();
+        println!("Start {} resolution with {} ({})", qname.as_ref(), name, addr);
         self.recursive_lookup(qname, qtype, *addr, recursion_desired)
     }
 
     fn get_root_server(&self) -> &(String, IpAddr) {
-        &self.root_servers[0]
+        let mut rng = self.rng.take();
+        let index = rng.gen_range(0..self.root_servers.len());
+        self.rng.set(rng);
+
+        &self.root_servers[index]
     }
 
     fn recursive_lookup<S>(&self, qname: S, qtype: QueryType, server_ip: IpAddr, recursion_desired: bool) -> Result<Packet>
@@ -70,6 +74,9 @@ impl Resolver {
 
             // If we received some answers and the result code is ok then we found
             // a match for the query.
+            // TODO: Currently, if the answer contains only CNAMEs, the response will not
+            //       be complete. To make it fully usable, it needs to recursively resolve
+            //       the CNAME alias to match the query type.
             if !response.answers.is_empty() && response.header.result_code == ResultCode::NoError {
                 return Ok(response);
             }
@@ -88,73 +95,66 @@ impl Resolver {
                 return Ok(response);
             }
 
-            // + Find NS records corresponding to queried domain.
-            let matching_ns = self.find_matching_ns(&qname, &response);
-            println!("-- Matching name server: {:?}", matching_ns);
+            // Find authoritative name servers records corresponding to queried domain.
+            let mut authoritative_name_servers = Resolver::authoritative_name_servers(&response.authorities);
+            // TODO: Loop over all the found servers (instead of using the first one) to maximize
+            //       the probability to resolve the queried name.
+            let ns = authoritative_name_servers.next();
 
-            // + Check if one of the NS record has an additional A record.
-            if let Some(ip) = self.find_matching_ns_a(&qname, &response) {
-                server_ip = IpAddr::V4(ip);
-                println!("-- Matching IP: {:?}", ip);
-                continue;
+            if ns.is_none() {
+                return Err(anyhow::anyhow!("Recursion not available because no authoritative name servers"));
             }
 
-            // + Perform new request to the same server for a random NS.
-            let authoritative_name_server = match matching_ns {
-                Some((_, ns)) => ns,
-                None => return Ok(response),
+            let ns = ns.unwrap();
+            println!("-- Found Authoritative Name Server: {} -> {}", ns.domain, ns.ns_name);
+
+            // Try to find a valid ip address to use for the selected authoritative name server.
+            // It searches in the additional records provided along with the authority records.
+            let addr = Resolver::name_server_addr(&ns.ns_name, &response.additionals);
+            println!("-- Trying to find A record for {}: {:?}", ns.ns_name, addr);
+
+            server_ip = match addr {
+                // For found addresses, resolve the query name with the new authoritative server ip.
+                Some(ip) => IpAddr::V4(ip),
+
+                // If the response doesn't contain the name server ip in the additional records section,
+                // try to resolve the authoritative name server from the root servers directly.
+                None => {
+                    let ns_response = self.resolve(&ns.ns_name, QueryType::A, true)?;
+                    let ip = ns_response.answers
+                        .iter()
+                        .find_map(|r| match r {
+                            Record::A(protocol::records::A { ip, .. }) => Some(ip),
+                            _ => None
+                        });
+
+                    match ip {
+                        Some(ip) => IpAddr::V4(*ip),
+                        None => return Err(anyhow::anyhow!("No recursion available because name server ip not found"))
+                    }
+                }
             };
-
-            let ns_response = self.recursive_lookup(authoritative_name_server, QueryType::A, server_ip, true)?;
-
-            // + Once the authoritative server ip is found, continue the loop
-            //   with the new server for the queried domain.
-            let first_answer = ns_response.answers
-                .iter()
-                .filter_map(|record| match record {
-                    Record::A(records::A { ip, .. }) => Some(IpAddr::V4(*ip)),
-                    _ => None
-                })
-                .next();
-
-            server_ip = match first_answer {
-                Some(ip) => ip,
-                None => return Ok(response),
-            }
         }
     }
 
-    fn find_matching_ns<'a, S>(&self, qname: S, packet: &'a Packet) -> Option<(&'a str, &'a str)>
-        where S: AsRef<str>
-    {
-        packet.authorities
+    fn authoritative_name_servers(records: &[protocol::packet::Record]) -> impl Iterator<Item=&protocol::records::AuthoritativeNameServer> {
+        records
             .iter()
-            .filter_map(|record| match record {
-                Record::AuthoritativeNameServer(records::AuthoritativeNameServer { domain, ns_name, .. }) => Some((domain.as_str(), ns_name.as_str())),
+            .filter_map(|r| match r {
+                Record::AuthoritativeNameServer(ns) => Some(ns),
                 _ => None
             })
-            .find(|(domain, _)| qname.as_ref().ends_with(domain))
     }
 
-    fn find_matching_ns_a<S>(&self, qname: S, packet: &Packet) -> Option<Ipv4Addr>
-        where S: AsRef<str>
-    {
-        packet.authorities
+    fn name_server_addr(name_server: &str, records: &[protocol::packet::Record]) -> Option<Ipv4Addr> {
+        records
             .iter()
-            .filter_map(|record| match record {
-                Record::AuthoritativeNameServer(records::AuthoritativeNameServer { domain, ns_name, .. }) => Some((domain.as_str(), ns_name.as_str())),
-                _ => None,
+            .filter_map(|r| match r {
+                Record::A(a) => Some(a),
+                _ => None
             })
-            .filter(move |(domain, _)| qname.as_ref().ends_with(domain))
-            .flat_map(|(_, host)|
-                packet.additionals
-                    .iter()
-                    .filter_map(move |record| match record {
-                        Record::A(records::A { ip, domain, .. }) if domain == host => Some(ip),
-                        _ => None,
-                    })
-            )
-            .copied()
+            .filter(|protocol::records::A { domain, .. }| domain == name_server)
+            .map(|protocol::records::A { ip, .. }| *ip)
             .next()
     }
 
