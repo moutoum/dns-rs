@@ -49,13 +49,15 @@ fn main() -> Result<()> {
         // let server_ip = Ipv4Addr::from(root_server.1);
         // response = recursive_lookup(&question.name, question.qtype, server_ip, opt.no_recursive)?;
 
-        let resolver = Resolver::builder().recursive(true).build();
-        response = resolver.resolve(question.name, question.qtype)?;
+        response = Resolver::builder()
+            .recursive(!opt.no_recursive)
+            .build()
+            .resolve(question.name, question.qtype, request.header.recursion_desired)?;
     }
 
     response.header.id = request.header.id;
     response.header.recursion_desired = request.header.recursion_desired;
-    response.header.recursion_available = true;
+    response.header.recursion_available = !opt.no_recursive;
     response.header.is_response = true;
 
     let mut buffer = BytePacketBuffer::new();
