@@ -1,7 +1,7 @@
 use crate::byte_packet_buffer::BytePacketBuffer;
 use crate::result::Result;
 use crate::seek::Seek;
-use crate::ser::Serializer;
+use crate::ser::{Serialize, Serializer};
 
 #[derive(Debug, PartialEq)]
 pub struct Header {
@@ -133,10 +133,12 @@ impl Header {
 
         header
     }
+}
 
-    pub fn serialize<S>(&self, serializer: &mut S) -> Result<()>
+impl Serialize for Header {
+    fn serialize<S>(&self, serializer: &mut S) -> Result<()>
         where
-            S: Serializer + Seek,
+            S: Serializer + Seek
     {
         serializer.serialize_u16(self.id)?;
 
@@ -166,6 +168,7 @@ impl Header {
 mod test {
     use crate::byte_packet_buffer::BytePacketBuffer;
     use crate::header::{Header, OpCode, ResultCode};
+    use crate::ser::Serialize;
 
     #[test]
     fn parse_header() {
@@ -199,7 +202,7 @@ mod test {
     }
 
     #[test]
-    fn write_header() {
+    fn serialize_header() {
         let header = Header {
             id: 23099,
             is_response: false,
@@ -218,14 +221,14 @@ mod test {
             total_additional_records: 0,
         };
 
-        let mut buffer = BytePacketBuffer::new();
+        let mut serializer = BytePacketBuffer::new();
 
-        let res = header.serialize(&mut buffer);
+        let res = header.serialize(&mut serializer);
         assert!(res.is_ok());
 
         assert_eq!(&[
             0x5a, 0x3b, 0x01, 0x20, 0x00, 0x01, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00
-        ], &buffer.bytes().as_slice());
+        ], serializer.bytes().as_slice());
     }
 }
