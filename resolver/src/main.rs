@@ -1,5 +1,3 @@
-use std::net::{SocketAddr, UdpSocket};
-
 use anyhow::Result;
 use structopt::StructOpt;
 
@@ -8,6 +6,8 @@ use protocol::packet::Packet;
 use protocol::ser::Serialize;
 
 use crate::resolver::Resolver;
+use tokio::net::UdpSocket;
+use std::net::SocketAddr;
 
 mod resolver;
 
@@ -20,16 +20,16 @@ struct ServerOptions {
     no_recursive: bool,
 }
 
-
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     // Starting udp server to receive DNS requests.
     let opt = ServerOptions::from_args();
-    let socket = UdpSocket::bind(&opt.bind_addr)?;
+    let socket = UdpSocket::bind(&opt.bind_addr).await?;
     println!("Starting server on {}", opt.bind_addr);
 
     // Reading socket.
     let mut data = [0u8; 512];
-    let (_, src) = socket.recv_from(&mut data)?;
+    let (_, src) = socket.recv_from(&mut data).await?;
 
     // Parsing request data into DNS Packet.
     let mut buffer = BytePacketBuffer::from_raw_data(&data);
@@ -62,7 +62,7 @@ fn main() -> Result<()> {
 
     let mut buffer = BytePacketBuffer::new();
     response.serialize(&mut buffer)?;
-    socket.send_to(&buffer.bytes(), src)?;
+    socket.send_to(&buffer.bytes(), src).await?;
 
     Ok(())
 }
