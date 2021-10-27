@@ -28,12 +28,15 @@ async fn main() -> Result<()> {
     println!("Starting server on {}", opt.bind_addr);
 
     loop {
-        // Reading socket.
+        // Creating buffer and waiting for incoming packets.
+        // When received, connect the socket to the incoming
+        // ip address.
         let mut data = [0u8; 512];
-        let (_, src) = socket.recv_from(&mut data).await?;
+        let (len, src) = socket.recv_from(&mut data).await?;
+        socket.connect(src).await?;
 
         // Parsing request data into DNS Packet.
-        let mut buffer = BytePacketBuffer::from_raw_data(&data);
+        let mut buffer = BytePacketBuffer::from_raw_data(&data[..len]);
         let mut request = Packet::from_buffer(&mut buffer);
 
         // Creating response DNS Packet based on the request.
@@ -42,13 +45,6 @@ async fn main() -> Result<()> {
         // Taking the first question and resolve it. Maybe considering
         // looping over all the questions in the future.
         if let Some(question) = request.questions.pop() {
-
-            // For now i'm only using the first root server but
-            // a better idea would be to randomly select the server
-            // from the root server list.
-            // let root_server = &ROOT_SERVERS[0];
-            // let server_ip = Ipv4Addr::from(root_server.1);
-            // response = recursive_lookup(&question.name, question.qtype, server_ip, opt.no_recursive)?;
 
             response = Resolver::builder()
                 .recursive(!opt.no_recursive)
@@ -63,6 +59,6 @@ async fn main() -> Result<()> {
 
         let mut buffer = BytePacketBuffer::new();
         response.serialize(&mut buffer)?;
-        socket.send_to(&buffer.bytes(), src).await?;
+        socket.send(&buffer.bytes()).await?;
     }
 }
