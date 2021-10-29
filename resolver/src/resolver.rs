@@ -1,9 +1,6 @@
-use std::cell::Cell;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 
 use anyhow::Result;
-use rand::prelude::ThreadRng;
-use rand::Rng;
 
 use protocol::byte_packet_buffer::BytePacketBuffer;
 use protocol::header::{Header, OpCode, ResultCode};
@@ -28,9 +25,8 @@ const ROOT_SERVERS: &[(&str, [u8; 4])] = &[
 ];
 
 pub struct Resolver {
-    recursive: bool,
+    pub(crate) recursive: bool,
     root_servers: Vec<(String, IpAddr)>,
-    rng: Cell<ThreadRng>,
 }
 
 impl Resolver {
@@ -38,7 +34,6 @@ impl Resolver {
         Resolver {
             recursive: false,
             root_servers: vec![],
-            rng: Cell::new(rand::thread_rng()),
         }
     }
 
@@ -55,10 +50,7 @@ impl Resolver {
     }
 
     fn get_root_server(&self) -> &(String, IpAddr) {
-        let mut rng = self.rng.take();
-        let index = rng.gen_range(0..self.root_servers.len());
-        self.rng.set(rng);
-
+        let index = rand::random::<usize>() % self.root_servers.len();
         &self.root_servers[index]
     }
 
@@ -176,10 +168,7 @@ impl Resolver {
     }
 
     fn get_random_id(&self) -> u16 {
-        let mut rng = self.rng.take();
-        let id = rng.gen();
-        self.rng.set(rng);
-        id
+        rand::random()
     }
 }
 
